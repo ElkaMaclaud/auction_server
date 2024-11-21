@@ -52,7 +52,7 @@ export const createSocketServer = (httpServer) => {
 
                 participantsAuction.forEach((participant, index) => {
                     participant.currentBid = 0;
-                    participant.turnEndTime = Date.now() + 30 * 1000;
+                    participant.turnEndTime = 0;
                     participant.active = index === 0;
                 });
 
@@ -66,7 +66,7 @@ export const createSocketServer = (httpServer) => {
                 socket: socket.id,
                 email: socket.userEmail,
                 currentBid: 0,
-                turnEndTime: Date.now() + 30 * 1000,
+                turnEndTime: 0,
                 active: false
             });
         }
@@ -87,7 +87,7 @@ export const createSocketServer = (httpServer) => {
                     socket: socket.id,
                     email: socket.userEmail,
                     currentBid: 0,
-                    turnEndTime: Date.now() + 30 * 1000,
+                    turnEndTime: 0,
                     active: false
                 });
             }
@@ -95,7 +95,7 @@ export const createSocketServer = (httpServer) => {
             auction.participants.forEach(i => io.to(i.socket).emit("participants updated", {
                 participants: auction.participants,
             }))
-            io.to(organizer.id).emit("participants updated", {participants: auction.participants});
+            io.to(organizer.id).emit("participants updated", { participants: auction.participants });
             console.log(`Пользователь ${socket.id} присоединился к аукциону`);
         });
 
@@ -132,9 +132,8 @@ export const createSocketServer = (httpServer) => {
                 const auction = auctions[auctionId];
                 auction.participants = auction.participants.filter(participant => participant.socket !== socket.id);
                 participantsAuction = auction.participants.filter(participant => participant.socket !== socket.id);
-                auction.participants.forEach(i => io.to(i.socket).emit("participants updated", {participants: auction.participants}));
-                auction.participants.forEach(i => io.to(i.socket).emit("participants updated", {participants: auction.participants}))
-                io.to(organizer.id).emit("participants updated", {participants: auction.participants})
+                auction.participants.forEach(i => io.to(i.socket).emit("participants updated", { participants: auction.participants }));
+                io.to(organizer.id).emit("participants updated", { participants: auction.participants })
             }
         });
     });
@@ -142,62 +141,27 @@ export const createSocketServer = (httpServer) => {
     const startTurn = (auctionId) => {
         const auction = auctions[auctionId];
         if (!auction || !auction.auctionActive) return;
-
         const currentBidder = auction.participants.find(participant => participant.active);
-        if (!currentBidder) {
-            const firstBidder = auction.participants[0];
-            if (firstBidder) {
-                firstBidder.active = true;
-                firstBidder.turnEndTime = Date.now() + 30 * 1000;
-                io.to(firstBidder.socket).emit("your turn", {
-                    message: "Ваш ход! У вас есть 30 секунд для ставки."
-                });
-                auction.participants.forEach(i => io.to(i.socket).emit("participants updated", {participants: auction.participants}));
-                io.to(organizer.id).emit("participants updated", {participants: auction.participants});
-                return;
-            }
-            return;
-        }
-
-      
         currentBidder.turnEndTime = Date.now() + 30 * 1000;
         io.to(currentBidder.socket).emit("your turn", {
             message: "Ваш ход! У вас есть 30 секунд для ставки."
         });
-        auction.participants.forEach(i => io.to(i.socket).emit("participants updated", {participants: auction.participants}));
-        io.to(organizer.id).emit("participants updated", {participants: auction.participants});
-
-        const updateParticipants = () => {
-            const remainingTime = Math.max(0, Math.floor((currentBidder.turnEndTime - Date.now()) / 1000));
-            auction.participants.forEach(participant => {
-                io.to(participant.socket).emit("participants updated", {
-                    participants: auction.participants,
-                    remainingTime: remainingTime 
-                });
-            });
-    
-            io.to(organizer.id).emit("participants updated", {
-                participants: auction.participants,
-                remainingTime: remainingTime 
-            });
-        };
+        updateAllParticipants(auction, 30);
 
         const intervalId = setInterval(() => {
-            updateParticipants();
-            if (Date.now() >= currentBidder.turnEndTime) {
+            const remainingTime = Math.max(0, Math.floor((currentBidder.turnEndTime - Date.now()) / 1000));
+            updateAllParticipants(auction, remainingTime)
+            if (remainingTime === 0) { // Date.now() >= currentBidder.turnEndTime
                 clearInterval(intervalId);
                 handleTurnTimeout(auction, currentBidder, auctionId);
             }
         }, 1000);
-
-        auction.participants.forEach(i => io.to(i.socket).emit("participants updated", {participants: auction.participants}));
-        io.to(organizer.id).emit("participants updated", {
-                participants: auction.participants,
-            });
     };
 
     const handleTurnTimeout = (auction, currentBidder, auctionId) => {
-        const nextBidderIndex = (auction.participants.findIndex(i => i.socket === currentBidder.socket) + 1) % auction.participants.length;
+        const currentBidderIndex = auction.participants.findIndex(i => i.socket === currentBidder.socket);
+        const nextBidderIndex = (currentBidderIndex + 1) % auction.participants.length;
+
         try {
             const nextBidder = auction.participants[nextBidderIndex];
 
@@ -208,15 +172,24 @@ export const createSocketServer = (httpServer) => {
                 message: "Время вышло! Ход переходит к следующему участнику.",
                 currentBidder: nextBidder.socket
             });
-            auction.participants.forEach(i => io.to(i.socket).emit("participants updated", {participants: auction.participants}));
-            io.to(organizer.id).emit("participants updated", {
-                participants: auction.participants,
-            });
 
             startTurn(auctionId);
         } catch (error) {
-            console.log(error)
+            console.log(error);
         }
+    };
+
+    const updateAllParticipants = (auction, num) => {
+        auction.participants.forEach(participant => {
+            io.to(participant.socket).emit("participants updated", {
+                participants: auction.participants,
+                remainingTime: num
+            });
+        });
+        io.to(organizer.id).emit("participants updated", {
+            participants: auction.participants,
+            remainingTime: num
+        });
     };
 
 }
