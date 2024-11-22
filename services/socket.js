@@ -11,35 +11,39 @@ let organizer;
 export const createSocketServer = (httpServer) => {
     const io = new Server(httpServer, {
         cors: {
-            origin: ["http://localhost:3000"],
+            origin: [process.env.PERMITTED_SOURCES],
             methods: ["GET", "POST"],
-            allowedHeaders: ["Authorization", "Content-Type"],
+            allowedHeaders: ["Content-Type"],
             credentials: true
         }
     });
 
     io.use((socket, next) => {
-        const jwtToken = socket.handshake.headers['authorization'];
-        if (jwtToken) {
-            const token = jwtToken.split(" ")[1];
-            jwt.verify(token, process.env.JWT_SECRET, (err, decoded) => {
-                if (err) {
-                    return next(new Error('Unauthorized'));
-                }
-                socket.userId = decoded.id;
-                socket.userEmail = decoded.email
-                socket.role = decoded.role;
-                next();
-            });
+        const url = socket.request.url; 
+        const searchParams = new URLSearchParams(url.split('?')[1]); 
+
+        const role = searchParams.get('role');
+        const nameCompany = searchParams.get('nameCompany');
+
+        if (role && nameCompany) {
+            socket.role = role; 
+            socket.nameCompany = nameCompany;
+            next();
         } else {
-            next(new Error('Unauthorized'));
+            socket.role = "organizer";
+            next();
         }
     });
-
+ 
     io.on("connection", (socket) => {
-        console.log(`Пользователь подключился: ${socket.id} ${socket.role} ${socket.userEmail}`);
+        console.log(`Пользователь подключился: ${socket.id} ${socket.role}`);
 
         if (socket.role === 'organizer') {
+            // Здесь предполагается, что url отправляется всем по участникам на почту, 
+            // но мы генерируем их тут и отправляем организатору
+            const companyes = ["OOO Энерготорг", "ИП Фарма", "OOO УРРГ", "OOO Газнефть"]
+            const participantsUrl = Array.from({length: 4}, (_, index) => 
+                `${process.env.PERMITTED_SOURCES}/auction?id=${Math.random().toString(36).substring(2, 15)}&nameCompany=${companyes[index]}&role=user`)
             socket.isOrganizer = true;
             organizer = socket
 
@@ -63,14 +67,14 @@ export const createSocketServer = (httpServer) => {
                 startTurn(auctionId);
             });
         } else {
-            if (!participants.find(i => i.email === socket.userEmail)) {
+            if (!participants.find(i => i.nameCompany === socket.nameCompany)) {
                 participants.push({
                     availability: "-",
                     term: 80,
                     warrantyObligations: 24,
                     paymentTerms: "30%",
                     socket: socket.id,
-                    email: socket.userEmail,
+                    nameCompany: socket.nameCompany,
                     currentBid: 0,
                     turnEndTime: 0,
                     active: false
@@ -78,14 +82,14 @@ export const createSocketServer = (httpServer) => {
             }
             if (Object.keys(auctions).length > 0) {
                 const auctionId = Object.keys(auctions)[0]
-                if (!auctions[auctionId].participants.find(i => i.email === socket.userEmail)) {
+                if (!auctions[auctionId].participants.find(i => i.nameCompany === socket.nameCompany)) {
                     auctions[auctionId].participants.push(({
                         availability: "-",
                         term: 80,
                         warrantyObligations: 24,
                         paymentTerms: "30%",
                         socket: socket.id,
-                        email: socket.userEmail,
+                        nameCompany: socket.nameCompany,
                         currentBid: 0,
                         turnEndTime: 0,
                         active: false
@@ -124,7 +128,7 @@ export const createSocketServer = (httpServer) => {
                     term: 80,
                     warrantyObligations: 24,
                     paymentTerms: "30%",
-                    email: socket.userEmail,
+                    nameCompany: socket.nameCompany,
                     currentBid: 0,
                     turnEndTime: 0,
                     active: false
@@ -148,7 +152,8 @@ export const createSocketServer = (httpServer) => {
             if (!auction || !auction.auctionActive) return;
 
             const currentBidder = auction.participants.find(particip => particip.socket === participant.socket);
-            // if (!currentBidder || currentBidder.currentBid >= bidAmount) return; 
+            if (!currentBidder) return; 
+            
             currentBidder.currentBid = parseInt(bidAmount);
         });
 

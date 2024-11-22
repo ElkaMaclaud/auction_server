@@ -13,11 +13,9 @@ const app = express()
 
 app.use(cors())
 app.use(express.json())
-app.use("/api", userRouter)
 
 const start = (async () => {
     try {
-        await mongoose.connect(`mongodb+srv://${process.env.MONGO_LOGIN}:${process.env.MONGO_PASSWORD}@cluster0.bipms.mongodb.net/auction`)
         const server = app.listen(PORT, () => console.log(`Сервер запущен на порте ${PORT}`))
         createSocketServer(server)
     } catch (error) {
