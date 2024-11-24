@@ -7,6 +7,7 @@ const auctions = {};
 let participants = []
 let organizer;
 let intervalId;
+let timeoutId;
 
 export const createSocketServer = (httpServer) => {
     const io = new Server(httpServer, {
@@ -74,7 +75,7 @@ export const createSocketServer = (httpServer) => {
                 participants.forEach(i => io.to(i.socket).emit("auction started", auctionId, auctions[auctionId].participants));
                 io.to(organizer.id).emit("auction started", auctionId, auctions[auctionId].participants)
                 console.log(`Аукцион начат`, auctionId);
-                setTimeout(() => {
+                timeoutId = setTimeout(() => {
                     endAuction(auctionId)
                 }, 15 * 60 * 1000)
                 startTurn(auctionId);
@@ -192,6 +193,9 @@ export const createSocketServer = (httpServer) => {
                         handleTurnTimeout(auction, currentBidder, auctionId);
                     }
                 };
+                if (intervalId) {
+                    clearInterval(intervalId);
+                }
                 intervalId = setInterval(executeIntervalWork, 1000);
             } else {
                 console.log("Нет ни одного участника")
@@ -237,6 +241,9 @@ export const createSocketServer = (httpServer) => {
         }
     };
     const endAuction = (auctionId) => {
+        if (timeoutId) {
+            clearTimeout(timeoutId)
+        }
         try {
             if (auctions[auctionId]) {
                 auctions[auctionId].participants.forEach(participant => participant.active = false);
