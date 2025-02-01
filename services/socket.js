@@ -211,14 +211,15 @@ export const createSocketServer = (httpServer) => {
         try {
             const nextBidder = auction.participants[nextBidderIndex];
 
-            auction.participants.forEach(participant => participant.active = false);
-            if (nextBidder) nextBidder.active = true;
-
-            io.to(nextBidder.socket).emit("turn timeout", {
-                message: "Время вышло! Ход переходит к следующему участнику.",
-                currentBidder: nextBidder.socket
+            auction.participants.forEach(participant => {
+                participant.active = false;
+                io.to(participant.socket).emit("turn timeout", {
+                    message: "Время вышло! Ход переходит к следующему участнику.",
+                    currentBidder: participant.name
+                });
             });
-
+            
+            if (nextBidder) nextBidder.active = true;
             startTurn(auctionId);
         } catch (error) {
             console.log(error);
@@ -228,7 +229,6 @@ export const createSocketServer = (httpServer) => {
     function executeIntervalWork(auction, currentBidder, auctionId) {
         const remainingTime = Math.max(0, Math.floor((currentBidder.turnEndTime - Date.now()) / 1000));
         if (remainingTime === 0) {
-            clearInterval(intervalId);
             handleTurnTimeout(auction, currentBidder, auctionId);
         } else {
             updateAllParticipants(auction, remainingTime);
