@@ -155,6 +155,9 @@ export const createSocketServer = (httpServer) => {
                 if (auction) {
                     if(socket.id === organizer.id) {
                         auction.participants.forEach(i => io.to(i.socket).emit("auction ended"));
+                        if (intervalId) {
+                            clearInterval(intervalId);
+                        }
                         delete auctions[auctionId]
                     }
                     const leavingParticipant = auction.participants.find(i => i.socket === socket.id)
@@ -258,6 +261,9 @@ export const createSocketServer = (httpServer) => {
             }
             participants.forEach(i => io.to(i.socket).emit("auction ended"));
             if (organizer) { io.to(organizer.id).emit("auction ended") }
+            if (intervalId) {
+                clearInterval(intervalId);
+            }
             delete auctions[auctionId]
         } catch (error) {
             console.log(error)
