@@ -254,6 +254,7 @@ export const createSocketServer = (httpServer) => {
             }
             participants.forEach(i => io.to(i.socket).emit("auction ended"));
             if (organizer) { io.to(organizer.id).emit("auction ended") }
+            auctions = []
         } catch (error) {
             console.log(error)
         }

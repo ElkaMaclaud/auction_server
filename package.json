@@ -1,5 +1,5 @@
 {
-  "name": "magazin-api",
+  "name": "auction",
   "version": "1.0.0",
   "description": "backend for the store",
   "main": "index.js",
