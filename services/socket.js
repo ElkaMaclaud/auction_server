@@ -153,6 +153,10 @@ export const createSocketServer = (httpServer) => {
             for (const auctionId in auctions) {
                 const auction = auctions[auctionId];
                 if (auction) {
+                    if(socket.id === organizer.id) {
+                        auction.participants.forEach(i => io.to(i.socket).emit("auction ended"));
+                        delete auctions[auctionId]
+                    }
                     const leavingParticipant = auction.participants.find(i => i.socket === socket.id)
                     if (leavingParticipant && leavingParticipant.active) {
                         console.log("Переход хода", auctionId)
@@ -254,7 +258,7 @@ export const createSocketServer = (httpServer) => {
             }
             participants.forEach(i => io.to(i.socket).emit("auction ended"));
             if (organizer) { io.to(organizer.id).emit("auction ended") }
-            auctions = []
+            delete auctions[auctionId]
         } catch (error) {
             console.log(error)
         }
