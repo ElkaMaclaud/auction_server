@@ -89,13 +89,13 @@ export const createSocketServer = (httpServer) => {
                 if (!auctions[auctionId].participants.find(i => i.nameCompany === socket.nameCompany)) {
                     if (auctions[auctionId].participants.length === 0) {
                         addParticipant(auctions[auctionId].participants, socket, true)
+                        startTurn(auctionId);
                     } else {
                         addParticipant(auctions[auctionId].participants, socket)
                     }
                 }
                 io.to(socket.id).emit("auction started", auctionId, auctions[auctionId].participants)
                 socket.join(socket.id);
-
             }
 
         }
@@ -142,7 +142,7 @@ export const createSocketServer = (httpServer) => {
             if (!currentBidder) return;
 
             currentBidder.currentBid = parseInt(bidAmount);
-            
+
             auction.participants.forEach(i => io.to(i.socket).emit("participants updated", { participants }));
             io.to(organizer.id).emit("participants updated", { participants })
         });
@@ -153,34 +153,36 @@ export const createSocketServer = (httpServer) => {
             for (const auctionId in auctions) {
                 const auction = auctions[auctionId];
                 if (auction) {
-                    if(socket.id === organizer.id) {
-                        auction.participants.forEach(i => io.to(i.socket).emit("auction ended"));
-                        if (intervalId) {
-                            clearInterval(intervalId);
-                        }
-                        delete auctions[auctionId]
+                    if (socket.id === organizer.id) {
+                        endAuction(auctionId)
                     }
                     const leavingParticipant = auction.participants.find(i => i.socket === socket.id)
                     if (leavingParticipant && leavingParticipant.active) {
-                        console.log("Переход хода", auctionId)
-                        try {
+                        if (!(auction.participants.filter(i => i.socket !== socket.id).length)) {
                             if (intervalId) {
                                 clearInterval(intervalId);
                             }
-                            handleTurnTimeout(auctions[auctionId], leavingParticipant, auctionId);
-                        } catch (error) {
-                            console.log(error)
+                        } else {
+                            console.log("Переход хода", auctionId)
+                            try {
+                                if (intervalId) {
+                                    clearInterval(intervalId);
+                                }
+                                handleTurnTimeout(auctions[auctionId], leavingParticipant, auctionId);
+                            } catch (error) {
+                                console.log(error)
+                            }
                         }
                     }
                     auction.participants = auction.participants.filter(participant => participant.socket !== socket.id);
                 }
-            } 
+            }
             participants.forEach(i => io.to(i.socket).emit("participants updated", { participants }));
-            if (organizer) { io.to(organizer.id).emit("participants updated", { participants })}
+            if (organizer) { io.to(organizer.id).emit("participants updated", { participants }) }
         });
     });
 
-    const startTurn = (auctionId) => {
+    function startTurn(auctionId) {
         const auction = auctions[auctionId];
         if (!auction) return;
 
@@ -193,20 +195,10 @@ export const createSocketServer = (httpServer) => {
                     participant: currentBidder,
                     message: "Ваш ход! У вас есть 30 секунд для ставки."
                 });
-                updateAllParticipants(auction, 30);
-
-                const executeIntervalWork = () => {
-                    const remainingTime = Math.max(0, Math.floor((currentBidder.turnEndTime - Date.now()) / 1000));
-                    updateAllParticipants(auction, remainingTime);
-                    if (remainingTime === 0) {
-                        clearInterval(intervalId);
-                        handleTurnTimeout(auction, currentBidder, auctionId);
-                    }
-                };
                 if (intervalId) {
                     clearInterval(intervalId);
                 }
-                intervalId = setInterval(executeIntervalWork, 1000);
+                intervalId = setInterval(() => executeIntervalWork(auction, currentBidder, auctionId), 1000);
             } else {
                 console.log("Нет ни одного участника")
             }
@@ -215,7 +207,7 @@ export const createSocketServer = (httpServer) => {
         }
     };
 
-    const handleTurnTimeout = (auction, currentBidder, auctionId) => {
+    function handleTurnTimeout(auction, currentBidder, auctionId) {
         const currentBidderIndex = auction.participants.findIndex(i => i.socket === currentBidder.socket);
         const nextBidderIndex = (currentBidderIndex + 1) % auction.participants.length;
 
@@ -236,7 +228,16 @@ export const createSocketServer = (httpServer) => {
         }
     };
 
-    const updateAllParticipants = (auction, num, participants = auction.participants) => {
+    function executeIntervalWork(auction, currentBidder, auctionId) {
+        const remainingTime = Math.max(0, Math.floor((currentBidder.turnEndTime - Date.now()) / 1000));
+        updateAllParticipants(auction, remainingTime);
+        if (remainingTime === 0) {
+            clearInterval(intervalId);
+            handleTurnTimeout(auction, currentBidder, auctionId);
+        }
+    };
+
+    function updateAllParticipants(auction, num, participants = auction.participants) {
         participants.forEach(participant => {
             io.to(participant.socket).emit("participants updated", {
                 participants,
@@ -250,9 +251,12 @@ export const createSocketServer = (httpServer) => {
             });
         }
     };
-    const endAuction = (auctionId) => {
+    function endAuction (auctionId) {
         if (timeoutId) {
             clearTimeout(timeoutId)
+        }
+        if (intervalId) {
+            clearInterval(intervalId);
         }
         try {
             if (auctions[auctionId]) {
@@ -261,16 +265,13 @@ export const createSocketServer = (httpServer) => {
             }
             participants.forEach(i => io.to(i.socket).emit("auction ended"));
             if (organizer) { io.to(organizer.id).emit("auction ended") }
-            if (intervalId) {
-                clearInterval(intervalId);
-            }
             delete auctions[auctionId]
         } catch (error) {
             console.log(error)
         }
     }
 
-    const addParticipant = (list, socket, active = false) => {
+    function addParticipant(list, socket, active = false) {
         list.push(({
             availability: "-",
             term: 80,
