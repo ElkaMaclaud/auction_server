@@ -165,9 +165,6 @@ export const createSocketServer = (httpServer) => {
                         } else {
                             console.log("Переход хода", auctionId)
                             try {
-                                if (intervalId) {
-                                    clearInterval(intervalId);
-                                }
                                 handleTurnTimeout(auctions[auctionId], leavingParticipant, auctionId);
                             } catch (error) {
                                 console.log(error)
@@ -230,10 +227,11 @@ export const createSocketServer = (httpServer) => {
 
     function executeIntervalWork(auction, currentBidder, auctionId) {
         const remainingTime = Math.max(0, Math.floor((currentBidder.turnEndTime - Date.now()) / 1000));
-        updateAllParticipants(auction, remainingTime);
         if (remainingTime === 0) {
             clearInterval(intervalId);
             handleTurnTimeout(auction, currentBidder, auctionId);
+        } else {
+            updateAllParticipants(auction, remainingTime);
         }
     };
 
