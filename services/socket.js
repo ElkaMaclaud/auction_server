@@ -195,6 +195,7 @@ export const createSocketServer = (httpServer) => {
                 if (intervalId) {
                     clearInterval(intervalId);
                 }
+                updateAllParticipants(auction, 30)
                 intervalId = setInterval(() => executeIntervalWork(auction, currentBidder, auctionId), 1000);
             } else {
                 console.log("Нет ни одного участника")
